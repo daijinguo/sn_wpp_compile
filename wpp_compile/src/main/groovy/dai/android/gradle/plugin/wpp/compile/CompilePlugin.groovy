@@ -20,9 +20,7 @@ import java.lang.reflect.Field
 //
 
 class CompilePlugin implements Plugin<Project> {
-
-    private static final String TAG = CompilePlugin.class.getSimpleName()
-
+    private static final String VER = "1.0.2"
     private static final String SEP = File.separator
     private static final String APPLICATION = "com.android.application"
     private static final String DEP_TAG = "onlyCompile"
@@ -37,8 +35,9 @@ class CompilePlugin implements Plugin<Project> {
         LOG = project.logger
 
         LOG.warn("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-        LOG.warn("author: patrick.dai")
-        LOG.warn("class : ${CompilePlugin.class.getName()}")
+        LOG.warn("author : patrick.dai")
+        LOG.warn("class  : ${CompilePlugin.class.getName()}")
+        LOG.warn("version: ${VER}")
         LOG.warn("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
 
         project.ext.Aapt2Enabled = this.&canAapt2EnabledCompat
@@ -214,6 +213,8 @@ class CompilePlugin implements Plugin<Project> {
         return result
     }
 
+    // the follow used by function onlyCompileCompat
+    private static final String githubSide = "https://github.com/daijinguo/sn_wpp_compile"
 
     @SuppressWarnings("UnnecessaryQualifiedReference")
     void onlyCompileCompat() {
@@ -235,30 +236,59 @@ class CompilePlugin implements Plugin<Project> {
             return
         }
 
-        Configuration onlyCompileConfig = project.getConfigurations().create(DEP_TAG)
-
         String version = getAndroidGradlePluginVersionCompat()
         LOG.warn(">>> this android gradle plugin version: ${version}")
 
-        if (version.startsWith("1.3") ||
-                version.startsWith("1.5") ||
-                version.startsWith("2.") ||
-                version.startsWith("3.")) {
-            // 大于等于 1.3.0 版本让 provided 继承 onlyCompile
-            //    低于  1.3.0 版本 手动提取 aar 中的jar添加依赖
-            if (compileOnlyConfig != null) {
-                compileOnlyConfig.extendsFrom(onlyCompileConfig)
-            } else {
-                providedConfig.extendsFrom(onlyCompileConfig)
+        // r : 主版本号
+        // x : 次版本号
+        // y : 修订版本号
+        String[] versions = version.split('.')
+        int r = -1
+        int x = -1
+        int y = -1
+        if (versions.length == 0) {
+            throw new GradleException("android gradle plugin version not split with '.', please visit: ${githubSide}")
+        }
+
+        try {
+
+            if (versions.length == 1) {
+                r = Integer.parseInt(versions[0])
+            } else if (versions.length >= 2) {
+                r = Integer.parseInt(versions[0])
+                x = Integer.parseInt(versions[1])
+            }
+
+        } catch (NumberFormatException e) {
+            throw new GradleException("android gradle plugin version not a number, please visit: ${githubSide}")
+        }
+
+        if (versions.length >= 3) {
+            try {
+                y = Integer.parseInt(versions[2])
+            } catch (NumberFormatException e) {
+                y = -1
             }
         }
 
-        if (version.startsWith("0.") ||
-                version.startsWith("1.0") ||
-                version.startsWith("1.1") ||
-                version.startsWith("1.2")) {
-            //不支持小于1.3.0的版本(不含1.3.0)
-            throw new GradleException("Not support version ${version}, android gradle plugin must >=1.3.0")
+        LOG.warn(">>> Version Number: {r.x.y}={${r}.${x}.${y}")
+
+        if (r < 3) {
+            throw new GradleException("We not support gradle plugin version less 3.0")
+        }
+
+        if (r >= 4) {
+            throw new GradleException("We not support gradle plugin version large 4.0")
+        }
+
+        Configuration onlyCompileConfig = project.getConfigurations().create(DEP_TAG)
+
+        // 大于等于 1.3.0 版本让 provided 继承 onlyCompile
+        //    低于  1.3.0 版本 手动提取 aar 中的jar添加依赖
+        if (compileOnlyConfig != null) {
+            compileOnlyConfig.extendsFrom(onlyCompileConfig)
+        } else {
+            providedConfig.extendsFrom(onlyCompileConfig)
         }
 
         //
@@ -267,237 +297,100 @@ class CompilePlugin implements Plugin<Project> {
         def android = project.getExtensions().getByName("android")
         android.applicationVariants.all { def variant ->
 
-            if (version.startsWith("1.3") ||
-                    version.startsWith("1.5") ||
-                    version.startsWith("2.0") ||
-                    version.startsWith("2.1") ||
-                    version.startsWith("2.2") ||
-                    version.startsWith("2.3") ||
-                    version.startsWith("2.4")) {
-                // maybe i do not care about that, because most use large than 3.0
-                LOG.warn(">>> current plugins version at[1.3, 1.5, 2.0, 2.1, 2.2, 2.3, 2.4]")
+            String name = "pre${variant.getName().capitalize()}Build"
+            LOG.warn(">>> +: task name = ${name}")
 
-                //支持1.3.0+ ~ 2.4.0+，且低于2.5.0，支持传递依赖
-                def prepareDependenciesTask =
-                        project.tasks.findByName("prepare${variant.getName().capitalize()}Dependencies")
-                if (prepareDependenciesTask) {
-                    def removeSyncIssues = {
+            // 支持2.5.0+ ~ 3.2.0+，支持传递依赖
+            def prepareBuildTask = project.tasks.findByName(name)
+            LOG.warn(">>> +: has prepare build task: ${prepareBuildTask}")
+
+            if (prepareBuildTask) {
+                boolean needRedirectAction = false
+                prepareBuildTask.actions.iterator().with { actionsIterator ->
+                    actionsIterator.each { action ->
+                        if (action.getActionClassName().contains("AppPreBuildTask")) {
+                            actionsIterator.remove()
+                            needRedirectAction = true
+                        }
+                    }
+                }
+                if (needRedirectAction) {
+                    prepareBuildTask.doLast {
+                        def compileManifests = null
+                        def runtimeManifests = null
+                        Class appPreBuildTaskClass = Class.forName("com.android.build.gradle.internal.tasks.AppPreBuildTask")
                         try {
-                            Class prepareDepTaskClass =
-                                    Class.forName("com.android.build.gradle.internal.tasks.PrepareDependenciesTask")
-                            Field checkersField = prepareDepTaskClass.getDeclaredField('checkers')
-                            checkersField.setAccessible(true)
-                            def checkers = checkersField.get(prepareDependenciesTask)
-                            checkers.iterator().with { checkersIterator ->
-                                checkersIterator.each { dependencyChecker ->
-                                    def syncIssues = dependencyChecker.syncIssues
-                                    syncIssues.iterator().with { syncIssuesIterator ->
-                                        syncIssuesIterator.each { syncIssue ->
-                                            if (syncIssue.getType() == 7 && syncIssue.getSeverity() == 2) {
-                                                project.logger.info(TAG, "[${DEP_TAG}] WARNING: ${DEP_TAG} has been enabled in 'com.android.application', ignore ${syncIssue}")
-                                                syncIssuesIterator.remove()
-                                            }
-                                        }
-                                    }
+                            //3.0.0+
+                            Field compileManifestsField = appPreBuildTaskClass.getDeclaredField("compileManifests")
+                            Field runtimeManifestsField = appPreBuildTaskClass.getDeclaredField("runtimeManifests")
+                            compileManifestsField.setAccessible(true)
+                            runtimeManifestsField.setAccessible(true)
+                            compileManifests = compileManifestsField.get(prepareBuildTask)
+                            runtimeManifests = runtimeManifestsField.get(prepareBuildTask)
 
-                                    // 兼容 1.3.0~2.1.3 版本
-                                    // 为了将 provided 的 aar 不参与打包
-                                    //    将 isOptional 设为 true
-                                    if (version.startsWith("1.3") ||
-                                            version.startsWith("1.5") ||
-                                            version.startsWith("2.0") ||
-                                            version.startsWith("2.1")) {
-                                        def configurationDependencies = dependencyChecker.configurationDependencies
-                                        List libraries = configurationDependencies.libraries
-                                        libraries.each { library ->
-                                            onlyCompileConfig.dependencies.each { providedDependency ->
-                                                String libName = library.getName()
-                                                if (libName.contains(providedDependency.group) &&
-                                                        libName.contains(providedDependency.name) &&
-                                                        libName.contains(providedDependency.version)) {
-                                                    Field isOptionalField = library.getClass().getDeclaredField("isOptional")
-                                                    Field modifiersField = Field.class.getDeclaredField("modifiers")
-                                                    modifiersField.setAccessible(true)
-                                                    modifiersField.setInt(isOptionalField,
-                                                            isOptionalField.getModifiers() & ~java.lang.reflect.Modifier.FINAL)
-                                                    isOptionalField.setAccessible(true)
-                                                    isOptionalField.setBoolean(library, true)
-                                                    // 为了递归调用可以引用，先声明再赋值
-                                                    def fixDependencies = null
-                                                    fixDependencies = { dependencies ->
-                                                        dependencies.each { dependency ->
-                                                            if (dependency.getClass() == library.getClass()) {
-                                                                isOptionalField.setBoolean(dependency, true)
-                                                                fixDependencies(dependency.dependencies)
-                                                            }
-                                                        }
-                                                    }
-                                                    fixDependencies(library.dependencies)
-                                                }
-                                            }
+                        } catch (Exception e) {
+                            // some failed on this version
+                            LOG.error("Some exception on current ${DEP_TAG}")
+                        }
+
+                        try {
+                            Set<ResolvedArtifactResult> compileArtifacts = compileManifests.getArtifacts()
+                            Set<ResolvedArtifactResult> runtimeArtifacts = runtimeManifests.getArtifacts()
+
+                            Map<String, String> runtimeIds = new HashMap<>(runtimeArtifacts.size())
+
+                            def handleArtifact = { id, consumer ->
+                                if (id instanceof ProjectComponentIdentifier) {
+                                    consumer(((ProjectComponentIdentifier) id).getProjectPath().intern(), "")
+                                } else if (id instanceof ModuleComponentIdentifier) {
+                                    ModuleComponentIdentifier moduleComponentId = (ModuleComponentIdentifier) id
+                                    consumer(
+                                            moduleComponentId.getGroup() + ":" + moduleComponentId.getModule(),
+                                            moduleComponentId.getVersion())
+                                } else {
+                                    LOG.warn("Unknown ComponentIdentifier type: ${id.getClass().getCanonicalName()}")
+                                }
+                            }
+
+                            runtimeArtifacts.each { def artifact ->
+                                def runtimeId = artifact.getId().getComponentIdentifier()
+                                def putMap = { def key, def value ->
+                                    runtimeIds.put(key, value)
+                                }
+                                handleArtifact(runtimeId, putMap)
+                            }
+
+                            compileArtifacts.each { def artifact ->
+                                final ComponentIdentifier compileId = artifact.getId().getComponentIdentifier()
+                                def checkCompile = { def key, def value ->
+                                    String runtimeVersion = runtimeIds.get(key)
+                                    if (runtimeVersion == null) {
+                                        String display = compileId.getDisplayName()
+                                        LOG.info("WARNING: ${DEP_TAG} has been enabled in '${APPLICATION}' you can ignore 'Android dependency '"
+                                                + display + "' is set to compileOnly/provided which is not supported'")
+                                    } else if (!runtimeVersion.isEmpty()) {
+                                        // compare versions.
+                                        if (runtimeVersion != value) {
+                                            throw new RuntimeException(
+                                                    String.format(
+                                                            "Android dependency '%s' has different version for the compile (%s) and runtime (%s) classpath. You should manually set the same version via DependencyResolution",
+                                                            key,
+                                                            value,
+                                                            runtimeVersion
+                                                    )
+                                            )
                                         }
                                     }
                                 }
+                                handleArtifact(compileId, checkCompile)
                             }
+
                         } catch (Exception e) {
                             e.printStackTrace()
                         }
                     }
-
-                    if (version.startsWith("1.3") ||
-                            version.startsWith("1.5") ||
-                            version.startsWith("2.0") ||
-                            version.startsWith("2.1")) {
-                        // 这里不处理 as sync 的时候会出错
-                        def appPlugin = project.getPlugins().findPlugin("com.android.application")
-                        def taskManager = appPlugin.getMetaClass().getProperty(appPlugin, "taskManager")
-                        def dependencyManager = taskManager.getClass().getSuperclass().getMetaClass().getProperty(taskManager, "dependencyManager")
-                        def extraModelInfo = dependencyManager.getMetaClass().getProperty(dependencyManager, "extraModelInfo")
-                        Map<?, ?> syncIssues = extraModelInfo.getSyncIssues()
-                        syncIssues.iterator().with { syncIssuesIterator ->
-                            syncIssuesIterator.each { syncIssuePair ->
-                                if (syncIssuePair.getValue().getType() == 7 && syncIssuePair.getValue().getSeverity() == 2) {
-                                    syncIssuesIterator.remove()
-                                }
-                            }
-                        }
-                        //下面同2.2.0+处理
-                        prepareDependenciesTask.configure removeSyncIssues
-
-                    } else if (version.startsWith("2.2") || version.startsWith("2.3")) {
-                        prepareDependenciesTask.configure removeSyncIssues
-
-                    } else if (version.startsWith("2.4")) {
-                        prepareDependenciesTask.doFirst removeSyncIssues
-
-                    }
-                }
-
-            }
-            //
-            // android gradle plugin 2.5 or 3.
-            //
-            else if (version.startsWith("2.5") || version.startsWith("3.")) {
-                LOG.warn(">>> android gradle plugins version at[2.5, 3.]")
-
-                //支持2.5.0+ ~ 3.2.0+，支持传递依赖
-                def prepareBuildTask = project.tasks.findByName("pre${variant.getName().capitalize()}Build")
-                if (prepareBuildTask) {
-                    boolean needRedirectAction = false
-                    prepareBuildTask.actions.iterator().with { actionsIterator ->
-                        actionsIterator.each { action ->
-                            if (action.getActionClassName().contains("AppPreBuildTask")) {
-                                actionsIterator.remove()
-                                needRedirectAction = true
-                            }
-                        }
-                    }
-                    if (needRedirectAction) {
-                        prepareBuildTask.doLast {
-                            def compileManifests = null
-                            def runtimeManifests = null
-                            Class appPreBuildTaskClass = Class.forName("com.android.build.gradle.internal.tasks.AppPreBuildTask")
-                            try {
-                                //3.0.0+
-                                Field compileManifestsField = appPreBuildTaskClass.getDeclaredField("compileManifests")
-                                Field runtimeManifestsField = appPreBuildTaskClass.getDeclaredField("runtimeManifests")
-                                compileManifestsField.setAccessible(true)
-                                runtimeManifestsField.setAccessible(true)
-                                compileManifests = compileManifestsField.get(prepareBuildTask)
-                                runtimeManifests = runtimeManifestsField.get(prepareBuildTask)
-
-                            } catch (Exception e) {
-                                try {
-                                    //2.5.0+
-                                    Field variantScopeField = appPreBuildTaskClass.getDeclaredField("variantScope")
-                                    variantScopeField.setAccessible(true)
-                                    def variantScope = variantScopeField.get(prepareBuildTask)
-                                    //noinspection UnnecessaryQualifiedReference
-                                    compileManifests = variantScope.getArtifactCollection(
-                                            com.android.build.gradle.internal.publishing.AndroidArtifacts.ConsumedConfigType.COMPILE_CLASSPATH,
-                                            com.android.build.gradle.internal.publishing.AndroidArtifacts.ArtifactScope.ALL,
-                                            com.android.build.gradle.internal.publishing.AndroidArtifacts.ArtifactType.MANIFEST
-                                    )
-
-                                    runtimeManifests = variantScope.getArtifactCollection(
-                                            com.android.build.gradle.internal.publishing.AndroidArtifacts.ConsumedConfigType.RUNTIME_CLASSPATH,
-                                            com.android.build.gradle.internal.publishing.AndroidArtifacts.ArtifactScope.ALL,
-                                            com.android.build.gradle.internal.publishing.AndroidArtifacts.ArtifactType.MANIFEST
-                                    )
-
-                                } catch (Exception e1) {
-                                }
-                            }
-
-                            try {
-                                Set<ResolvedArtifactResult> compileArtifacts = compileManifests.getArtifacts()
-                                Set<ResolvedArtifactResult> runtimeArtifacts = runtimeManifests.getArtifacts()
-
-                                Map<String, String> runtimeIds = new HashMap<>(runtimeArtifacts.size())
-
-                                def handleArtifact = { id, consumer ->
-                                    if (id instanceof ProjectComponentIdentifier) {
-                                        consumer(((ProjectComponentIdentifier) id).getProjectPath().intern(), "")
-                                    } else if (id instanceof ModuleComponentIdentifier) {
-                                        ModuleComponentIdentifier moduleComponentId = (ModuleComponentIdentifier) id
-                                        consumer(
-                                                moduleComponentId.getGroup() + ":" + moduleComponentId.getModule(),
-                                                moduleComponentId.getVersion())
-                                    } else {
-                                        project.getLogger().warn(
-                                                "Unknown ComponentIdentifier type: " + id.getClass().getCanonicalName())
-                                    }
-                                }
-
-                                runtimeArtifacts.each { def artifact ->
-                                    def runtimeId = artifact.getId().getComponentIdentifier()
-                                    def putMap = { def key, def value ->
-                                        runtimeIds.put(key, value)
-                                    }
-                                    handleArtifact(runtimeId, putMap)
-                                }
-
-                                compileArtifacts.each { def artifact ->
-                                    final ComponentIdentifier compileId = artifact.getId().getComponentIdentifier()
-                                    def checkCompile = { def key, def value ->
-                                        String runtimeVersion = runtimeIds.get(key)
-                                        if (runtimeVersion == null) {
-                                            String display = compileId.getDisplayName()
-                                            LOG.info(
-                                                    "WARNING: ${DEP_TAG} has been enabled in '${APPLICATION}' you can ignore 'Android dependency '"
-                                                            + display
-                                                            + "' is set to compileOnly/provided which is not supported'")
-                                        } else if (!runtimeVersion.isEmpty()) {
-                                            // compare versions.
-                                            if (runtimeVersion != value) {
-                                                throw new RuntimeException(
-                                                        String.format(
-                                                                "Android dependency '%s' has different version for the compile (%s) and runtime (%s) classpath. You should manually set the same version via DependencyResolution",
-                                                                key,
-                                                                value,
-                                                                runtimeVersion
-                                                        )
-                                                )
-                                            }
-                                        }
-                                    }
-                                    handleArtifact(compileId, checkCompile)
-                                }
-
-                            } catch (Exception e) {
-                                e.printStackTrace()
-                            }
-                        }
-                    }
                 }
             }
-            //
-            // android gradle plugin version large than 3
-            //
-            else {
-                throw new GradleException("We can not support android gradle plugin version > 3")
-            }
-
         }
 
         // redirect warning log to info log
@@ -513,7 +406,7 @@ class CompilePlugin implements Plugin<Project> {
                     //provided dependencies can only be jars.
                     if (message != null && (message.contains("Provided dependencies can only be jars.") ||
                             message.contains("provided dependencies can only be jars. "))) {
-                        project.logger.info(message)
+                        LOG.info(message)
                         return
                     }
                 }
@@ -549,7 +442,7 @@ class CompilePlugin implements Plugin<Project> {
     /**
      * R.java 输出路径兼容获取
      */
-    File rFileDirCompat(def processAndroidResourceTask) {
+    static File rFileDirCompat(def processAndroidResourceTask) {
         if (processAndroidResourceTask == null) {
             return null
         }

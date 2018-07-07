@@ -218,6 +218,8 @@ class CompilePlugin implements Plugin<Project> {
 
     @SuppressWarnings("UnnecessaryQualifiedReference")
     void onlyCompileCompat() {
+        LOG.warn(">>>")
+
         if (!project.getPlugins().hasPlugin(APPLICATION)) {
             LOG.warn(">>> not '${APPLICATION}'")
             return
@@ -237,7 +239,7 @@ class CompilePlugin implements Plugin<Project> {
         }
 
         String version = getAndroidGradlePluginVersionCompat()
-        LOG.warn(">>> this android gradle plugin version: ${version}")
+        LOG.warn(">>> android gradle plugin version string: '${version}'")
 
         // r : 主版本号
         // x : 次版本号
@@ -251,7 +253,6 @@ class CompilePlugin implements Plugin<Project> {
         }
 
         try {
-
             if (versions.length == 1) {
                 r = Integer.parseInt(versions[0])
             } else if (versions.length >= 2) {
@@ -271,7 +272,7 @@ class CompilePlugin implements Plugin<Project> {
             }
         }
 
-        LOG.warn(">>> Version Number: {r.x.y}={${r}.${x}.${y}")
+        LOG.warn(">>> version number: { R.X.Y } = { ${r}.${x}.${y} }")
 
         if (r < 3) {
             throw new GradleException("We not support gradle plugin version less 3.0")
@@ -302,18 +303,24 @@ class CompilePlugin implements Plugin<Project> {
 
             // 支持2.5.0+ ~ 3.2.0+，支持传递依赖
             def prepareBuildTask = project.tasks.findByName(name)
-            LOG.warn(">>> +: has prepare build task: ${prepareBuildTask}")
+            LOG.warn(">>> +: has prepare build: ${prepareBuildTask}")
 
             if (prepareBuildTask) {
+                LOG.warn(">>> ++:")
+
                 boolean needRedirectAction = false
                 prepareBuildTask.actions.iterator().with { actionsIterator ->
                     actionsIterator.each { action ->
-                        if (action.getActionClassName().contains("AppPreBuildTask")) {
+                        String actionClass = action.getActionClassName()
+                        LOG.warn(">>> +++: action class name: ${actionClass}")
+                        if (actionClass.contains("AppPreBuildTask")) {
                             actionsIterator.remove()
                             needRedirectAction = true
                         }
                     }
                 }
+                LOG.warn(">>> ++: need to redirect action? ${needRedirectAction}")
+
                 if (needRedirectAction) {
                     prepareBuildTask.doLast {
                         def compileManifests = null

@@ -367,6 +367,11 @@ class CompilePlugin implements Plugin<Project> {
                                 handleArtifact(runtimeId, putMap)
                             }
 
+                            // this debug for show all runtimeIds
+                            runtimeIds.each {
+                                LOG.warn(">>> +++: { ${it.key}, ${it.value} }")
+                            }
+
                             compileArtifacts.each { def artifact ->
                                 final ComponentIdentifier compileId = artifact.getId().getComponentIdentifier()
                                 def checkCompile = { def key, def value ->

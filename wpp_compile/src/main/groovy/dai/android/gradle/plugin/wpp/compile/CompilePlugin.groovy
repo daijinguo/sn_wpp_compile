@@ -242,7 +242,7 @@ class CompilePlugin implements Plugin<Project> {
         // r : 主版本号
         // x : 次版本号
         // y : 修订版本号
-        String[] versions = version.split('.')
+        String[] versions = version.split("\\.")
         int r = -1
         int x = -1
         int y = -1

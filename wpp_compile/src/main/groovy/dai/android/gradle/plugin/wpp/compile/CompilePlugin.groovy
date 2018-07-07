@@ -301,13 +301,11 @@ class CompilePlugin implements Plugin<Project> {
             String name = "pre${variant.getName().capitalize()}Build"
             LOG.warn(">>> +: task name = ${name}")
 
-            // 支持2.5.0+ ~ 3.2.0+，支持传递依赖
+            // 支持 2.5.0+ ~ 3.2.0+，支持传递依赖
             def prepareBuildTask = project.tasks.findByName(name)
-            LOG.warn(">>> +: has prepare build: ${prepareBuildTask}")
+            LOG.warn("\n>>> +: has prepare build: ${prepareBuildTask}")
 
             if (prepareBuildTask) {
-                LOG.warn(">>> ++:")
-
                 boolean needRedirectAction = false
                 prepareBuildTask.actions.iterator().with { actionsIterator ->
                     actionsIterator.each { action ->
@@ -406,7 +404,7 @@ class CompilePlugin implements Plugin<Project> {
         }
 
         // redirect warning log to info log
-        def listenerBackedLoggerContext = project.getLogger().getMetaClass().getProperty(project.getLogger(), "context")
+        def listenerBackedLoggerContext = LOG.getMetaClass().getProperty(LOG, "context")
         def originalOutputEventListener = listenerBackedLoggerContext.getOutputEventListener()
         def originalOutputEventLevel = listenerBackedLoggerContext.getLevel()
         listenerBackedLoggerContext.setOutputEventListener({ def outputEvent ->
@@ -416,8 +414,10 @@ class CompilePlugin implements Plugin<Project> {
                     String message = outputEvent.getMessage()
                     //Provided dependencies can only be jars.
                     //provided dependencies can only be jars.
-                    if (message != null && (message.contains("Provided dependencies can only be jars.") ||
-                            message.contains("provided dependencies can only be jars. "))) {
+                    if (message != null &&
+                            (message.contains("Provided dependencies can only be jars.") ||
+                                    message.contains("provided dependencies can only be jars. "))
+                    ) {
                         LOG.info(message)
                         return
                     }

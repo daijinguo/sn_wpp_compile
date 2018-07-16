@@ -313,7 +313,7 @@ class CompilePlugin implements Plugin<Project> {
                 prepareBuildTask.actions.iterator().with { actionsIterator ->
                     actionsIterator.each { action ->
                         String actionClass = action.getActionClassName()
-                        LOG.warn(">>> +++: action class name: ${actionClass}")
+                        ///LOG.warn(">>> +++: action class name: ${actionClass}")
                         if (actionClass.contains("AppPreBuildTask")) {
                             actionsIterator.remove()
                             needRedirectAction = true

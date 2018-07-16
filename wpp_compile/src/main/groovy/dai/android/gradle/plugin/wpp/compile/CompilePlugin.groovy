@@ -20,7 +20,7 @@ import java.lang.reflect.Field
 //
 
 class CompilePlugin implements Plugin<Project> {
-    private static final String VER = "1.0.2"
+    private static final String VER = "1.0.3"
     private static final String SEP = File.separator
     private static final String APPLICATION = "com.android.application"
     private static final String DEP_TAG = "onlyCompile"
@@ -34,12 +34,6 @@ class CompilePlugin implements Plugin<Project> {
         this.project = project
         LOG = project.logger
 
-        LOG.warn("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-        LOG.warn("author : patrick.dai")
-        LOG.warn("class  : ${CompilePlugin.class.getName()}")
-        LOG.warn("version: ${VER}")
-        LOG.warn("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-
         project.ext.Aapt2Enabled = this.&canAapt2EnabledCompat
         project.ext.Aapt2JniEnabled = this.&canAapt2JniEnabledCompat
         project.ext.Aapt2DaemonModeEnabled = this.&canAapt2DaemonModeEnabledCompat
@@ -51,6 +45,15 @@ class CompilePlugin implements Plugin<Project> {
         project.ext.getRDirCompat = this.&getRDirCompat
         project.ext.getRFileCompat = this.&getRFileCompat
         project.ext.getPackageForRCompatCompat = this.&getPackageForRCompatCompat
+
+        LOG.warn("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+        LOG.warn("author : patrick.dai")
+        LOG.warn("address: https://github.com/daijinguo/sn_wpp_compile")
+        LOG.warn("class  : ${CompilePlugin.class.getName()}")
+        LOG.warn("version: ${VER}")
+        LOG.warn("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+        LOG.warn("enable aapt2: ${canAapt2EnabledCompat()}")
+        LOG.warn("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
     }
 
     static <T> T resolveEnumValue(String value, Class<T> type) {
@@ -218,7 +221,7 @@ class CompilePlugin implements Plugin<Project> {
 
     @SuppressWarnings("UnnecessaryQualifiedReference")
     void onlyCompileCompat() {
-        LOG.warn(">>>")
+        LOG.warn("")
 
         if (!project.getPlugins().hasPlugin(APPLICATION)) {
             LOG.warn(">>> not '${APPLICATION}'")
@@ -299,11 +302,11 @@ class CompilePlugin implements Plugin<Project> {
         android.applicationVariants.all { def variant ->
 
             String name = "pre${variant.getName().capitalize()}Build"
-            LOG.warn(">>> +: task name = ${name}")
+            ///LOG.warn(">>> +: task name = ${name}")
 
             // 支持 2.5.0+ ~ 3.2.0+，支持传递依赖
             def prepareBuildTask = project.tasks.findByName(name)
-            LOG.warn("\n>>> +: has prepare build: ${prepareBuildTask}")
+            ///LOG.warn("\n>>> +: has prepare build: ${prepareBuildTask}")
 
             if (prepareBuildTask) {
                 boolean needRedirectAction = false
@@ -317,7 +320,7 @@ class CompilePlugin implements Plugin<Project> {
                         }
                     }
                 }
-                LOG.warn(">>> ++: need to redirect action? ${needRedirectAction}")
+                ///LOG.warn(">>> ++: need to redirect action? ${needRedirectAction}")
 
                 if (needRedirectAction) {
                     prepareBuildTask.doLast {
